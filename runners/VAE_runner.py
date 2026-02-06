@@ -12,7 +12,7 @@ from models.refinenet import CondRefineNetDilated
 import tqdm
 from torchvision.utils import save_image, make_grid
 from PIL import Image
-from models.VAE_constructure import VAE_model_BN_ver1, VAE_model_BN_ver2, VAE_model_ver1, VAE_model_ver2
+from models.VAE_constructure import VAE_model
 from losses.VAE_loss import ELBO
 
 
@@ -89,25 +89,13 @@ class AnnealRunner():
             shutil.rmtree(tb_path)
         tb_logger = tensorboardX.SummaryWriter(log_dir = tb_path)
         
-        if self.config.model.model_type == 'VAE_model_ver2':
-            VAE_model = VAE_model_ver2(self.config).to(device = self.config.device)
-        elif self.config.model.model_type == 'VAE_model_BN_ver2':
-            VAE_model = VAE_model_BN_ver2(self.config).to(device = self.config.device)
-        elif self.config.model.model_type == 'VAE_model_BN_ver1':
-            VAE_model = VAE_model_BN_ver1(self.config).to(device = self.config.device)
-        elif self.config.model.model_type == 'VAE_model_ver1':
-            VAE_model = VAE_model_ver1(self.config).to(device = self.config.device)
-        else:
-            raise NotImplementedError('model type {} not understood.'.format(self.config.model.model_type))
-            
-        VAE_model = torch.nn.DataParallel(VAE_model)
-        
-        optimizer = self.get_optimizer(VAE_model.parameters())
-        
+        VAE_network = VAE_model(self.config, self.config.model.model_type).to(device = self.config.device)
+        VAE_network = torch.nn.DataParallel(VAE_network)
+        optimizer = self.get_optimizer(VAE_network.parameters())
         
         if self.args.resume_training:
             states = torch.load(os.path.join(self.args.log, 'checkpoint.pth'))
-            VAE_model.load_state_dict(states[0])
+            VAE_network.load_state_dict(states[0])
             optimizer.load_state_dict(states[1])
         
         step = 0
@@ -116,7 +104,7 @@ class AnnealRunner():
         for epoch in range(self.config.training.n_epochs):
             for i, (X,y) in enumerate(train_loader):
                 step += 1
-                VAE_model.train()
+                VAE_network.train()
                 
                 X = X.to(self.config.device)
                 if self.config.data.logit_transform is True:
@@ -124,7 +112,7 @@ class AnnealRunner():
                 
                 
                 if self.config.training.algo == 'ELBO':
-                    loss = ELBO(VAE_model, X)
+                    loss = ELBO(VAE_network, X)
                 else:
                     raise NotImplementedError('loss_function {} not understood.'.format(self.config.training.algo))
         
@@ -137,7 +125,7 @@ class AnnealRunner():
                 logging.info("step: {}, loss: {}".format(step, loss.item()))
                 
                 if step % 100 == 0:
-                    VAE_model.eval()
+                    VAE_network.eval()
                     try:
                         test_X, test_y = next(test_iter)
                     except StopIteration:
@@ -149,7 +137,7 @@ class AnnealRunner():
                         
                     with torch.no_grad():
                         if self.config.training.algo == 'ELBO':
-                            loss = ELBO(VAE_model, test_X)
+                            loss = ELBO(VAE_network, test_X)
                         else:
                             raise NotImplementedError('loss_function {} not understood.'.format(self.config.training.algo))
         
@@ -159,7 +147,7 @@ class AnnealRunner():
                 if step % self.config.training.snapshot_freq == 0:
                     # save model checkpoint
                     states = [
-                        VAE_model.state_dict(),
+                        VAE_network.state_dict(),
                         optimizer.state_dict(),
                     ]
                     torch.save(states, os.path.join(self.args.log, 'checkpoint_{}.pth'.format(step)))
@@ -169,33 +157,23 @@ class AnnealRunner():
     
     def test(self):
         states = torch.load(os.path.join(self.args.log, 'checkpoint.pth'), map_location=self.config.device)
-        if self.config.model.model_type == 'VAE_model_ver2':
-            VAE_model = VAE_model_ver2(self.config).to(device = self.config.device)
-        elif self.config.model.model_type == 'VAE_model_BN_ver2':
-            VAE_model = VAE_model_BN_ver2(self.config).to(device = self.config.device)
-        elif self.config.model.model_type == 'VAE_model_BN_ver1':
-            VAE_model = VAE_model_BN_ver1(self.config).to(device = self.config.device)
-        elif self.config.model.model_type == 'VAE_model_ver1':
-            VAE_model = VAE_model_ver1(self.config).to(device = self.config.device)
-        else:
-            raise NotImplementedError('model type {} not understood.'.format(self.config.model.model_type))
-            
-        VAE_model = torch.nn.DataParallel(VAE_model)
-        
-        VAE_model.load_state_dict(states[0])
+       
+        VAE_network = VAE_model(self.config, self.config.model.model_type).to(device = self.config.device)
+        VAE_network = torch.nn.DataParallel(VAE_network)
+        VAE_network.load_state_dict(states[0])
 
         if not os.path.exists(self.args.image_folder):
             os.makedirs(self.args.image_folder)
 
         grid_size = 5
         
-        VAE_model.eval()
+        VAE_network.eval()
         
         if self.config.data.dataset == 'CIFAR10':
             z = torch.randn((grid_size ** 2, self.config.model.latent_dimension), device = self.config.device)
             if self.config.model.generater == 'VAE':
                 with torch.no_grad():
-                    output_mean = VAE_model.decoder(z)
+                    output_mean = VAE_network.decoder(z)
                 all_samples = torch.normal(output_mean, torch.ones_like(output_mean))
             else:
                 raise NotImplementedError('generater {} not understood.'.format(self.config.model.generater))
@@ -214,5 +192,3 @@ class AnnealRunner():
         
         else: 
             raise NotImplementedError('dataset {} not understood.'.format(self.config.data.dataset))
-
-

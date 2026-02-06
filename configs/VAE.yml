@@ -29,7 +29,7 @@ model:
   ngf: 128
   ### configurations for MNIST
   # ngf: 64
-  model_type: "VAE_model_ver2"
+  model_type: "ver2"
 
 optim:
   weight_decay: 0.000

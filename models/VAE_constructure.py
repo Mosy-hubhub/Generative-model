@@ -3,57 +3,7 @@ import torch.nn.functional as F
 import torch
 from functools import partial
 from .refinenet import CRPBlock, MeanPoolConv, UpsampleConv, InstanceNorm2dPlus
-
-
-class VAE_Scaler(nn.Module):
-    """用于 VAE 防止 KL 消失的特殊缩放层
-    Args:
-        latent_dim: 潜在空间维度
-        tau: 超参数，默认 0.5, 确保 gamma_mu > sqrt(tau)
-        init_scale: 初始化 scale 参数的值
-    """
-    def __init__(self, latent_dim, tau=0.5):
-        super().__init__()
-        self.latent_dim = latent_dim
-        self.tau = tau
-        
-        # 可训练参数 theta
-        self.scale = nn.Parameter(torch.zeros(latent_dim))
-        
-    def forward(self, x, mode='positive'):
-        """
-        Args:
-            x: 输入张量 [batch_size, latent_dim]
-            mode: 'positive' 用于 mu, 'negative' 用于 log_var
-        """
-        if mode == 'positive':
-            # gamma_mu = sqrt(tau + (1-tau) * sigmoid(theta))
-            scale = self.tau + (1 - self.tau) * torch.sigmoid(self.scale)
-        elif mode == 'negative':
-            # gamma_sigma = sqrt((1-tau) * sigmoid(-theta))
-            scale = (1 - self.tau) * torch.sigmoid(-self.scale)
-        else:
-            raise ValueError("mode must be 'positive' or 'negative'")
-        
-        # 确保数值稳定性
-        scale = torch.clamp(scale, min=1e-8)
-        
-        # 应用缩放: x * sqrt(scale)
-        scale_sqrt = torch.sqrt(scale)
-        # 扩展维度以匹配 batch_size
-        scale_sqrt = scale_sqrt.unsqueeze(0).expand(x.size(0), -1)
-        
-        return x * scale_sqrt
-    
-    def get_gamma_values(self):
-        """获取当前的 gamma_mu 和 gamma_sigma 值"""
-        with torch.no_grad():
-            gamma_mu = torch.sqrt(self.tau + (1 - self.tau) * torch.sigmoid(self.scale))
-            gamma_sigma = torch.sqrt((1 - self.tau) * torch.sigmoid(-self.scale))
-            return gamma_mu.mean().item(), gamma_sigma.mean().item()
-
-
-
+from .layers import Act_bn_conv_block, VAE_Scaler
 
 
 class VAE_encoder_ver1(nn.Module):
@@ -67,20 +17,18 @@ class VAE_encoder_ver1(nn.Module):
         self.ngf = ngf = config.model.ngf
         self.act = act = nn.ELU()
         self.latent_dim = latent_dim = config.model.latent_dimension
-        self.norm = InstanceNorm2dPlus
-        # self.act = act = nn.ReLU(True)
         
         
         self.cnn = nn.Sequential(nn.Conv2d(config.data.channels, ngf, 3, stride=1, padding=1),
-                                 CRPBlock(ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf, 2 * ngf),
-                                 CRPBlock(2 * ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(2 * ngf,  4 * ngf),
-                                 CRPBlock(4 * ngf, 2, act),
+                                 Act_bn_conv_block(4 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf * 4, ngf * 2),
-                                 CRPBlock(ngf * 2, 2, act),
+                                 Act_bn_conv_block(2 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf * 2, ngf),
-                                 CRPBlock(ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf, ngf // 2),
                                  )
         
@@ -119,20 +67,18 @@ class VAE_encoder_BN_ver1(nn.Module):
         self.ngf = ngf = config.model.ngf
         self.act = act = nn.ELU()
         self.latent_dim = latent_dim = config.model.latent_dimension
-        self.norm = InstanceNorm2dPlus
-        # self.act = act = nn.ReLU(True)
         
         
         self.cnn = nn.Sequential(nn.Conv2d(config.data.channels, ngf, 3, stride=1, padding=1),
-                                 CRPBlock(ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf, 2 * ngf),
-                                 CRPBlock(2 * ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(2 * ngf,  4 * ngf),
-                                 CRPBlock(4 * ngf, 2, act),
+                                 Act_bn_conv_block(4 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf * 4, ngf * 2),
-                                 CRPBlock(ngf * 2, 2, act),
+                                 Act_bn_conv_block(2 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf * 2, ngf),
-                                 CRPBlock(ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf, ngf // 2),
                                  )
         
@@ -161,8 +107,6 @@ class VAE_encoder_BN_ver1(nn.Module):
     
     
     
-    
-    
 class VAE_decoder_ver1(nn.Module):
     '''
     input dimension: latent_dimension * 2
@@ -184,15 +128,15 @@ class VAE_decoder_ver1(nn.Module):
                                                 )
         
         self.network = nn.Sequential(UpsampleConv(ngf // 2, ngf),
-                                     CRPBlock(ngf, 2, act),
+                                     Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                      UpsampleConv(ngf, ngf * 2),
-                                     CRPBlock(ngf * 2, 2, act),
+                                     Act_bn_conv_block(ngf * 2, act = act, num_act_bn_conv = 1),
                                      UpsampleConv(ngf * 2, ngf * 4),
-                                     CRPBlock(ngf * 4, 2, act),
+                                     Act_bn_conv_block(ngf * 4, act = act, num_act_bn_conv = 1),
                                      UpsampleConv(ngf * 4, ngf * 2),
-                                     CRPBlock(ngf * 2, 2, act),
+                                     Act_bn_conv_block(ngf * 2, act = act, num_act_bn_conv = 1),
                                      UpsampleConv(ngf * 2, ngf),
-                                     CRPBlock(ngf, 2, act),
+                                     Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                      nn.Conv2d(ngf, config.data.channels, 3, stride=1, padding=1),
                                      )
     
@@ -223,34 +167,32 @@ class VAE_encoder_ver2(nn.Module):
         self.ngf = ngf = config.model.ngf
         self.act = act = nn.ELU()
         self.latent_dim = latent_dim = config.model.latent_dimension
-        self.norm = InstanceNorm2dPlus
-        # self.act = act = nn.ReLU(True)
         
         
         self.cnn = nn.Sequential(nn.Conv2d(config.data.channels, ngf, 3, stride=1, padding=1),
-                                 CRPBlock(ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf, 2 * ngf),
-                                 CRPBlock(2 * ngf, 2, act),
+                                 Act_bn_conv_block(2 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(2 * ngf,  4 * ngf),
-                                 CRPBlock(4 * ngf, 2, act),
+                                 Act_bn_conv_block(4 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf * 4, ngf * 2),
-                                 CRPBlock(ngf * 2, 2, act),
+                                 Act_bn_conv_block(2 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf * 2, ngf),
-                                 CRPBlock(ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  )
         
         self.mean = nn.Sequential(nn.BatchNorm1d(ngf *  4, affine=True),
-                                  nn.ELU(),
+                                  act,
                                   nn.Linear(ngf * 4, latent_dim),
                                   nn.BatchNorm1d(latent_dim, affine=True),
-                                  nn.ELU(),
+                                  act,
                                   )
         
         self.log_var = nn.Sequential(nn.BatchNorm1d(ngf * 4, affine=True),
-                                 nn.ReLU(),
+                                 act,
                                  nn.Linear(ngf * 4, latent_dim),
                                  nn.BatchNorm1d(latent_dim, affine=True),
-                                 nn.ReLU(),
+                                 act,
                                  )
     
     
@@ -276,35 +218,33 @@ class VAE_encoder_BN_ver2(nn.Module):
         self.ngf = ngf = config.model.ngf
         self.act = act = nn.ELU()
         self.latent_dim = latent_dim = config.model.latent_dimension
-        self.norm = InstanceNorm2dPlus
-        # self.act = act = nn.ReLU(True)
         
         
         self.cnn = nn.Sequential(nn.Conv2d(config.data.channels, ngf, 3, stride=1, padding=1),
-                                 CRPBlock(ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf, 2 * ngf),
-                                 CRPBlock(2 * ngf, 2, act),
+                                 Act_bn_conv_block(2 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(2 * ngf,  4 * ngf),
-                                 CRPBlock(4 * ngf, 2, act),
+                                 Act_bn_conv_block(4 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf * 4, ngf * 2),
-                                 CRPBlock(ngf * 2, 2, act),
+                                 Act_bn_conv_block(2 * ngf, act = act, num_act_bn_conv = 1),
                                  MeanPoolConv(ngf * 2, ngf),
-                                 CRPBlock(ngf, 2, act),
+                                 Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                  )
         
         self.mean = nn.Sequential(nn.BatchNorm1d(ngf *  4, affine=True),
-                                  nn.ELU(),
+                                  act,
                                   nn.Linear(ngf * 4, latent_dim),
                                   nn.BatchNorm1d(latent_dim, affine=True),
-                                  nn.ELU(),
+                                  act,
                                   nn.BatchNorm1d(latent_dim, affine=True),
                                   )
         
         self.log_var = nn.Sequential(nn.BatchNorm1d(ngf * 4, affine=True),
-                                 nn.ReLU(),
+                                 act,
                                  nn.Linear(ngf * 4, latent_dim),
                                  nn.BatchNorm1d(latent_dim, affine=True),
-                                 nn.ReLU(),
+                                 act,
                                  )
     
     
@@ -338,15 +278,15 @@ class VAE_decoder_ver2(nn.Module):
                                                 nn.BatchNorm1d(ngf * 4, affine = True),
                                                 )  
         
-        self.network = nn.Sequential(CRPBlock(ngf, 2, act),
+        self.network = nn.Sequential(Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                      UpsampleConv(ngf, ngf * 2),
-                                     CRPBlock(ngf * 2, 2, act),
+                                     Act_bn_conv_block(2 * ngf, act = act, num_act_bn_conv = 1),
                                      UpsampleConv(ngf * 2, ngf * 4),
-                                     CRPBlock(ngf * 4, 2, act),
+                                     Act_bn_conv_block(4 * ngf, act = act, num_act_bn_conv = 1),
                                      UpsampleConv(ngf * 4, ngf * 2),
-                                     CRPBlock(ngf * 2, 2, act),
+                                     Act_bn_conv_block(2 * ngf, act = act, num_act_bn_conv = 1),
                                      UpsampleConv(ngf * 2, ngf),
-                                     CRPBlock(ngf, 2, act),
+                                     Act_bn_conv_block(ngf, act = act, num_act_bn_conv = 1),
                                      nn.Conv2d(ngf, config.data.channels, 3, stride=1, padding=1)
                                      )
     
@@ -360,65 +300,35 @@ class VAE_decoder_ver2(nn.Module):
     
 #======================================================================================
 
-
 #======================================================================================
 
+class VAE_model(nn.Module):
+    def __init__(self, config, version):
+        super().__init__()
+        if version == 'BN_ver1':
+            self.encoder = VAE_encoder_BN_ver1(config)
+            self.decoder = VAE_decoder_ver1(config)
+        elif version == 'ver1':
+            self.encoder = VAE_encoder_ver1(config)
+            self.decoder = VAE_decoder_ver1(config)
+        elif version == 'BN_ver2':
+            self.encoder = VAE_encoder_BN_ver2(config)
+            self.decoder = VAE_decoder_ver2(config)
+        elif version == 'ver2':
+            self.encoder = VAE_encoder_ver2(config)
+            self.decoder = VAE_decoder_ver2(config)
+        else:
+            raise NotImplementedError('VAE model version {} not understood.'.format(version))
+        
+            
+    def forward(self, X, epsilon):
+        (mean, log_var) = self.encoder(X)
+        z = mean + torch.exp(0.5 * log_var) * epsilon
+        output = self.decoder(z)
+        return output, mean, log_var
 
-    
-class VAE_model_BN_ver1(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.encoder = VAE_encoder_BN_ver1(config)
-        self.decoder = VAE_decoder_ver1(config)
-            
-            
-    def forward(self, X, epsilon):
-        (mean, log_var) = self.encoder(X)
-        z = mean + torch.exp(0.5 * log_var) * epsilon
-        output = self.decoder(z)
-        return output, mean, log_var
-        
-        
-class VAE_model_ver1(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.encoder = VAE_encoder_ver1(config)
-        self.decoder = VAE_decoder_ver1(config)
-            
-            
-    def forward(self, X, epsilon):
-        (mean, log_var) = self.encoder(X)
-        z = mean + torch.exp(0.5 * log_var) * epsilon
-        output = self.decoder(z)
-        return output, mean, log_var
-    
-    
-class VAE_model_BN_ver2(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.encoder = VAE_encoder_BN_ver2(config)
-        self.decoder = VAE_decoder_ver2(config)
-            
-            
-    def forward(self, X, epsilon):
-        (mean, log_var) = self.encoder(X)
-        z = mean + torch.exp(0.5 * log_var) * epsilon
-        output = self.decoder(z)
-        return output, mean, log_var
-            
-            
-class VAE_model_ver2(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.encoder = VAE_encoder_ver2(config)
-        self.decoder = VAE_decoder_ver2(config)
-            
-            
-    def forward(self, X, epsilon):
-        (mean, log_var) = self.encoder(X)
-        z = mean + torch.exp(0.5 * log_var) * epsilon
-        output = self.decoder(z)
-        return output, mean, log_var
+
+
             
             
 
