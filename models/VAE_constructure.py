@@ -51,8 +51,8 @@ class VAE_encoder_ver1(nn.Module):
         temp = self.cnn(X)
         temp = temp.squeeze(dim=[2, 3])
         mean = self.mean(temp)
-        var = self.var(temp)
-        return (mean, var)
+        log_var = self.log_var(temp)
+        return (mean, log_var)
     
     
 class VAE_encoder_BN_ver1(nn.Module):
@@ -102,8 +102,8 @@ class VAE_encoder_BN_ver1(nn.Module):
         temp = self.cnn(X)
         temp = temp.squeeze(dim=[2, 3])
         mean = self.mean(temp)
-        var = self.var(temp)
-        return (mean, var)
+        log_var = self.log_var(temp)
+        return (mean, log_var)
     
     
     
@@ -119,8 +119,6 @@ class VAE_decoder_ver1(nn.Module):
         self.logit_transform = config.data.logit_transform
         self.ngf = ngf = config.model.ngf
         self.act = act = nn.ELU()
-        self.norm = InstanceNorm2dPlus
-        # self.act = act = nn.ReLU(True)
         
         self.decoder_projection = nn.Sequential(nn.Linear(latent_dim, ngf // 2),
                                                 act,
@@ -198,10 +196,10 @@ class VAE_encoder_ver2(nn.Module):
     
     def forward(self, X):
         temp = self.cnn(X)
-        temp = temp.squeeze(dim=[2, 3])
+        temp = temp.reshape(X.shape[0], -1)
         mean = self.mean(temp)
-        var = self.var(temp)
-        return (mean, var)
+        log_var = self.log_var(temp)
+        return (mean, log_var)
     
     
     
@@ -250,10 +248,10 @@ class VAE_encoder_BN_ver2(nn.Module):
     
     def forward(self, X):
         temp = self.cnn(X)
-        temp = temp.squeeze(dim=[2, 3])
+        temp = temp.reshape(X.shape[0], -1)
         mean = self.mean(temp)
-        var = self.var(temp)
-        return (mean, var)
+        log_var = self.log_var(temp)
+        return (mean, log_var)
     
     
     
@@ -269,9 +267,7 @@ class VAE_decoder_ver2(nn.Module):
         self.logit_transform = config.data.logit_transform
         self.ngf = ngf = config.model.ngf
         self.act = act = nn.ELU()
-        self.norm = InstanceNorm2dPlus
         self.latent_dim = latent_dim = config.model.latent_dimension
-        # self.act = act = nn.ReLU(True)
         
         self.decoder_projection = nn.Sequential(nn.Linear(latent_dim, ngf * 4),
                                                 act,
@@ -323,6 +319,7 @@ class VAE_model(nn.Module):
             
     def forward(self, X, epsilon):
         (mean, log_var) = self.encoder(X)
+        log_var = torch.clamp(log_var, max = 10)
         z = mean + torch.exp(0.5 * log_var) * epsilon
         output = self.decoder(z)
         return output, mean, log_var

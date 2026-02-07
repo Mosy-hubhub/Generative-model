@@ -16,15 +16,10 @@ from models.VAE_constructure import VAE_model
 from losses.VAE_loss import ELBO
 
 
-class AnnealRunner():
+class VAERunner():
     def __init__(self, args, config):
         self.config = config
         self.args = args
-        
-        sigmas = torch.tensor(
-            np.exp(np.linspace(np.log(self.config.model.sigma_begin), np.log(self.config.model.sigma_end),
-                               self.config.model.num_classes))).float().to(self.config.device)
-        self.sigmas = sigmas
     
     def logit_trans(self, image, lamb = 1e-6):
         '''
@@ -104,7 +99,7 @@ class AnnealRunner():
         for epoch in range(self.config.training.n_epochs):
             for i, (X,y) in enumerate(train_loader):
                 step += 1
-                VAE_network.train()
+                VAE_network.module.train()
                 
                 X = X.to(self.config.device)
                 if self.config.data.logit_transform is True:
@@ -112,7 +107,7 @@ class AnnealRunner():
                 
                 
                 if self.config.training.algo == 'ELBO':
-                    loss = ELBO(VAE_network, X)
+                    loss, KL_divergence = ELBO(X, VAE_network)
                 else:
                     raise NotImplementedError('loss_function {} not understood.'.format(self.config.training.algo))
         
@@ -122,7 +117,7 @@ class AnnealRunner():
                 optimizer.step()
                 
                 tb_logger.add_scalar('loss', loss, global_step=step)
-                logging.info("step: {}, loss: {}".format(step, loss.item()))
+                logging.info("step: {}, loss: {}, KL_divergence: {}".format(step, loss.item(), KL_divergence.item()))
                 
                 if step % 100 == 0:
                     VAE_network.eval()
@@ -137,12 +132,14 @@ class AnnealRunner():
                         
                     with torch.no_grad():
                         if self.config.training.algo == 'ELBO':
-                            loss = ELBO(VAE_network, test_X)
+                            loss, KL_divergence = ELBO(test_X, VAE_network)
                         else:
                             raise NotImplementedError('loss_function {} not understood.'.format(self.config.training.algo))
         
         
                     tb_logger.add_scalar('test_{}_loss'.format(self.config.training.algo), loss, global_step=step)
+                    tb_logger.add_scalar('test_KL_divergence', KL_divergence, global_step=step)
+                    print(f'TEST ELBO loss is {loss}, KL_divergence is {KL_divergence}')
                     
                 if step % self.config.training.snapshot_freq == 0:
                     # save model checkpoint

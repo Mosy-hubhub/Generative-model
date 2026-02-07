@@ -1,12 +1,13 @@
 import torch
 import math
+import numpy as np
 
 def ELBO(X, VAE_model):
     '''
     loss = E_{x~p(x)}[E_{z~p(z|x)}[-logq(x|z)] + KL(p(z|x)||q(z))]
     '''
     N = X.shape[0]
-    latent_dim = VAE_model.encoder.latent_dim
+    latent_dim = VAE_model.module.encoder.latent_dim
     image_dim = X[0].numel()
     
     epsilon = torch.randn((N, latent_dim), device = X.device)
@@ -15,7 +16,7 @@ def ELBO(X, VAE_model):
                                      + torch.sum(torch.exp(log_var)) 
                                      - torch.sum(log_var)) - latent_dim / 2
     loss = (1 / (2 * N)) * torch.sum((X - output) ** 2) 
-    + 0.5 * image_dim * torch.log(2 * math.pi)
+    + 0.5 * image_dim * np.log(2 * math.pi)
     + KL_divergence
     
     return loss, KL_divergence
