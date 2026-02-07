@@ -130,6 +130,9 @@ class AnnealRunner():
                 tb_logger.add_scalar('loss', loss, global_step=step)
                 logging.info("step: {}, loss: {}".format(step, loss.item()))
                 
+                if step >= self.config.training.n_iters:
+                    return 0
+                
                 if step % 100 == 0:
                     scorenet.eval()
                     try:

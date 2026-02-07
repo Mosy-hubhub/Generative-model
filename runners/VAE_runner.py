@@ -21,7 +21,7 @@ class VAERunner():
         self.config = config
         self.args = args
     
-    def logit_trans(self, image, lamb = 1e-6):
+    def logit_transform(self, image, lamb = 1e-6):
         '''
         to make data more stable
         y = ln[(lamb + (1 - 2 * lamb) * x) / 1 - (lamb + (1 - 2 * lamb) * x)]
@@ -119,6 +119,9 @@ class VAERunner():
                 tb_logger.add_scalar('loss', loss, global_step=step)
                 logging.info("step: {}, loss: {}, KL_divergence: {}".format(step, loss.item(), KL_divergence.item()))
                 
+                if step >= self.config.training.n_iters:
+                    return 0
+                
                 if step % 100 == 0:
                     VAE_network.eval()
                     try:
@@ -164,17 +167,14 @@ class VAERunner():
 
         grid_size = 5
         
-        VAE_network.eval()
+        VAE_network.module.eval()
         
         if self.config.data.dataset == 'CIFAR10':
             z = torch.randn((grid_size ** 2, self.config.model.latent_dimension), device = self.config.device)
-            if self.config.model.generater == 'VAE':
-                with torch.no_grad():
-                    output_mean = VAE_network.decoder(z)
-                all_samples = torch.normal(output_mean, torch.ones_like(output_mean))
-            else:
-                raise NotImplementedError('generater {} not understood.'.format(self.config.model.generater))
-        
+            with torch.no_grad():
+                output_mean = VAE_network.module.decoder(z)
+            all_samples = torch.normal(output_mean, torch.ones_like(output_mean))
+            
             all_samples = torch.clamp(all_samples, 0,  1).to('cpu')
             all_samples = all_samples.view(grid_size ** 2, self.config.data.channels, self.config.data.image_size, 
                                            self.config.data.image_size)

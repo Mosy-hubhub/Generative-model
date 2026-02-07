@@ -301,6 +301,7 @@ class VAE_decoder_ver2(nn.Module):
 class VAE_model(nn.Module):
     def __init__(self, config, version):
         super().__init__()
+        self.logit_transform = config.data.logit_transform
         if version == 'BN_ver1':
             self.encoder = VAE_encoder_BN_ver1(config)
             self.decoder = VAE_decoder_ver1(config)
@@ -322,6 +323,8 @@ class VAE_model(nn.Module):
         log_var = torch.clamp(log_var, max = 10)
         z = mean + torch.exp(0.5 * log_var) * epsilon
         output = self.decoder(z)
+        if self.logit_transform is False:
+            output = torch.sigmoid(output)
         return output, mean, log_var
 
 

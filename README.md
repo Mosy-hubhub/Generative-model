@@ -13,7 +13,7 @@ python main.py  --config VAE.yml --doc VAE_cofar10 --runner VAERunner
 You can have a competition with gobang model by running
 
 ```bash
-python main.py --runner VAERunner --test -o samples
+python main.py --runner VAERunner --doc VAE_cofar10 --test -o samples
 ```
 
 **NCSN**
