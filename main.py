@@ -26,13 +26,15 @@ def parse_args_and_config():
     parser.add_argument('-o', '--image_folder', type=str, default='images', help="The directory of image outputs")
 
     args = parser.parse_args()
-    run_id = str(os.getpid())
-    run_time = time.strftime('%Y-%b-%d-%H-%M-%S')
-    # args.doc = '_'.join([args.doc, run_id, run_time])
-    args.log = os.path.join(args.run, 'logs', args.doc)
 
     # parse config file
     if not args.test:
+        if not args.resume_training:
+            run_id = str(os.getpid())
+            run_time = time.strftime('%Y-%b-%d-%H-%M-%S')
+            args.doc = '_'.join([args.doc, run_id, run_time])
+            
+        args.log = os.path.join(args.run, 'logs', args.doc)
         with open(os.path.join('configs', args.config), 'r') as f:
             config = yaml.load(f, Loader=yaml.FullLoader)
         new_config = dict2namespace(config)

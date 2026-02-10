@@ -5,7 +5,13 @@
 We can train an VAE by running
 
 ```bash
-python main.py  --config VAE.yml --doc VAE_cofar10 --runner VAERunner 
+python main.py  --config VAE.yml --runner VAERunner --doc VAE_cifar10
+```
+
+if we need to continue training before
+
+```bash
+python main.py  --config VAE.yml --runner VAERunner --resume_training --doc VAE_cifar10 
 ```
 
 ### Sampling
@@ -13,7 +19,7 @@ python main.py  --config VAE.yml --doc VAE_cofar10 --runner VAERunner
 You can have a competition with gobang model by running
 
 ```bash
-python main.py --runner VAERunner --doc VAE_cofar10 --test -o samples
+python main.py --runner VAERunner --test -o samples --doc VAE_cifar10
 ```
 
 **NCSN**

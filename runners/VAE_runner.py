@@ -175,12 +175,12 @@ class VAERunner():
                 output_mean = VAE_network.module.decoder(z)
             all_samples = torch.normal(output_mean, torch.ones_like(output_mean))
             
+            if self.config.data.logit_transform:
+                all_samples = torch.sigmoid(all_samples)
+            
             all_samples = torch.clamp(all_samples, 0,  1).to('cpu')
             all_samples = all_samples.view(grid_size ** 2, self.config.data.channels, self.config.data.image_size, 
                                            self.config.data.image_size)
-
-            if self.config.data.logit_transform:
-                all_samples = torch.sigmoid(all_samples)
 
             image_grid = make_grid(all_samples, nrow=grid_size)
 
