@@ -14,32 +14,14 @@ from torchvision.utils import save_image, make_grid
 from PIL import Image
 from models.VAE_constructure import VAE_model
 from losses.VAE_loss import ELBO
+from .import model_runner
 
-
-class VAERunner():
+class VAERunner(model_runner):
     def __init__(self, args, config):
         self.config = config
         self.args = args
     
-    def logit_transform(self, image, lamb = 1e-6):
-        '''
-        to make data more stable
-        y = ln[(lamb + (1 - 2 * lamb) * x) / 1 - (lamb + (1 - 2 * lamb) * x)]
-        '''
-        image = lamb + (1 - 2 * lamb) * image 
-        return torch.log(image) - torch.log1p(-image)
-    
-    
-    def get_optimizer(self, parameters):
-        if self.config.optim.optimizer == 'Adam':
-            return optim.Adam(parameters, lr=self.config.optim.lr, weight_decay=self.config.optim.weight_decay,
-                              betas=(self.config.optim.beta1, 0.999), amsgrad=self.config.optim.amsgrad)
-        elif self.config.optim.optimizer == 'SGD':
-            return optim.SGD(parameters, lr=self.config.optim.lr, momentum=0.9)
-        else:
-            raise NotImplementedError('Optimizer {} not understood.'.format(self.config.optim.optimizer))
-        
-        
+       
     def train(self):
         '''
         step1: create two function for data preprocessing (self.config.data.random_flip:true or false)

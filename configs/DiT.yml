@@ -1,0 +1,45 @@
+training:
+  batch_size: 128
+  n_epochs: 50000
+  n_iters: 200001
+  ngpu: 1
+  snapshot_freq: 5000
+  algo: 'dsm_anneal'
+  anneal_power: 2.0
+
+sampling:
+  cfg_scale: 4.0
+  num_sampling_steps: 50
+
+data:
+  ## mnist
+  # dataset: "MNIST"
+  # image_size: 28
+  # channels: 1
+  # logit_transform: false
+  # random_flip: false
+
+ ## cifar10
+  dataset: "CIFAR10"
+  image_size: 32
+  channels: 3
+  logit_transform: false
+  random_flip: true
+  num_classes: 10
+
+model:
+  patch_size: 2
+  depth: 3
+  hidden_dim: 32
+  num_heads: 5
+  mlp_ratio: 2
+  # choice: "ema" or "mse"
+  vae: "ema"
+  learn_sigma: true
+
+optim:
+  weight_decay: 0.000
+  optimizer: "Adam"
+  lr: 0.001
+  beta1: 0.9
+  amsgrad: false
