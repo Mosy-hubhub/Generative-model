@@ -100,8 +100,8 @@ class DiTBlock(nn.Module):
         self.norm2 = nn.LayerNorm(hidden_dim, elementwise_affine = False, eps = 1e-6)
         self.atten = Attention(hidden_dim, num_heads, qkv_bias = True, **block_kwargs)
         hidden_features = hidden_dim * mlp_ratio
-        self.mlp = Mlp(hidden_dim, hidden_features, act_layer = approx_gelu)
         approx_gelu = lambda: nn.GELU(approximate='tanh')
+        self.mlp = Mlp(hidden_dim, hidden_features, act_layer = approx_gelu)
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
             nn.Linear(hidden_dim, 6 * hidden_dim, bias=True)

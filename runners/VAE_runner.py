@@ -1,20 +1,16 @@
 import torch
 import numpy as np
 from torchvision.datasets import CIFAR10
-import torch.optim as optim
 import torchvision.transforms as transforms
 import os
 import logging
 from torch.utils.data import DataLoader
 import tensorboardX
 import shutil
-from models.refinenet import CondRefineNetDilated
-import tqdm
 from torchvision.utils import save_image, make_grid
-from PIL import Image
 from models.VAE_constructure import VAE_model
 from losses.VAE_loss import ELBO
-from .import model_runner
+from .abstruct_runner import model_runner
 
 class VAERunner(model_runner):
     def __init__(self, args, config):
@@ -124,7 +120,6 @@ class VAERunner(model_runner):
         
                     tb_logger.add_scalar('test_{}_loss'.format(self.config.training.algo), loss, global_step=step)
                     tb_logger.add_scalar('test_KL_divergence', KL_divergence, global_step=step)
-                    print(f'TEST ELBO loss is {loss}, KL_divergence is {KL_divergence}')
                     
                 if step % self.config.training.snapshot_freq == 0:
                     # save model checkpoint
@@ -166,8 +161,8 @@ class VAERunner(model_runner):
 
             image_grid = make_grid(all_samples, nrow=grid_size)
 
-            save_image(image_grid, os.path.join(self.args.image_folder, 'image.png'))
-            torch.save(all_samples, os.path.join(self.args.image_folder, 'image_raw.pth'))
+            save_image(image_grid, os.path.join(self.args.image_folder, self.args.doc, 'image.png'))
+            torch.save(all_samples, os.path.join(self.args.image_folder, self.args.doc, 'image_raw.pth'))
         
         else: 
             raise NotImplementedError('dataset {} not understood.'.format(self.config.data.dataset))

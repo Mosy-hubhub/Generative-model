@@ -14,7 +14,11 @@ from diffusers.models import AutoencoderKL
 from utils.diffusion import create_diffusion
 
 
-class DiTRunner(model_runner):
+
+class DiT_pixel_Runner(model_runner):
+    """
+    this version only has DiT, take diffusion in pixel space
+    """
     def __init__(self, args, config):
         self.config = config
         self.args = args        
@@ -61,7 +65,7 @@ class DiTRunner(model_runner):
             shutil.rmtree(tb_path)
         tb_logger = tensorboardX.SummaryWriter(log_dir = tb_path)
         
-        latent_size = self.config.data.image_size // 8
+        latent_size = self.config.data.image_size
         model = DiT(input_size = latent_size,
                     patch_size = self.config.model.patch_size,
                     depth = self.config.model.depth, 
@@ -74,7 +78,6 @@ class DiTRunner(model_runner):
         model = torch.nn.DataParallel(model) 
 
         diffusion = create_diffusion(timestep_respacing="")  # default: 1000 steps, linear noise schedule
-        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{self.config.model.vae}").to(self.config.device)
         logging.info(f"DiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
         
         optimizer = self.get_optimizer(model.parameters())
@@ -95,10 +98,6 @@ class DiTRunner(model_runner):
                 y = y.to(self.config.device)
                 if self.config.data.logit_transform is True:
                     X = self.logit_transform(X)
-                
-                with torch.no_grad():
-                # Map input images to latent space + normalize latents:
-                    X = vae.encode(X).latent_dist.sample().mul_(0.18215)
                 
                 t = torch.randint(0, diffusion.num_timesteps, (X.shape[0],), device=self.config.device)
                 model_kwargs = dict(y=y)
@@ -130,7 +129,6 @@ class DiTRunner(model_runner):
                         X = self.logit_transform(X)
                         
                     with torch.no_grad():
-                        X = vae.encode(X).latent_dist.sample().mul_(0.18215)
                         t = torch.randint(0, diffusion.num_timesteps, (test_X.shape[0],), device=self.config.device)
                         model_kwargs = dict(y = y)
                         loss_dict = diffusion.training_losses(model, test_X, t, model_kwargs)
@@ -160,7 +158,6 @@ class DiTRunner(model_runner):
                     mlp_ratio = self.config.model.mlp_ratio,
                     learn_sigma = self.config.model.learn_sigma
                     ).to(self.config.device)
-        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{self.config.model.vae}").to(self.config.device)
         model = torch.nn.DataParallel(model)
         model.load_state_dict(states[0])
         diffusion = create_diffusion(str(self.config.sampling.num_sampling_steps))
@@ -181,7 +178,7 @@ class DiTRunner(model_runner):
             raise NotImplementedError('dataset {} not understood.'.format(self.config.data.dataset))
 
         # Create sampling noise:
-        latent_size = self.config.data.image_size // 8
+        latent_size = self.config.data.image_size
         n = len(class_labels)
         z = torch.randn(n, 4, latent_size, latent_size, device = self.config.device)
         y = torch.tensor(class_labels, device = self.config.device)
@@ -200,7 +197,6 @@ class DiTRunner(model_runner):
                                           model_kwargs = model_kwargs,
                                           progress = True,
                                           device = self.config.device)
-        samples = vae.decode(samples / 0.18215).sample
         if self.config.data.logit_transform:
                 samples = torch.sigmoid(samples)
         samples_cfg, samples_null = samples.chunk(2, dim=0)

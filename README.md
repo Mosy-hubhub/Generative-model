@@ -42,3 +42,47 @@ Suppose the log files are stored in `run/logs/cifar10`. We can produce samples t
 ```bash
 python main.py --runner AnnealRunner --test -o samples
 ```
+
+**DiT**
+
+We can train an VAE by running
+
+```bash
+python main.py  --config DiT.yml --runner DiTRunner --doc DiT_cifar10
+```
+
+if we need to continue training before
+
+```bash
+python main.py  --config DiT.yml --runner DiTRunner --resume_training --doc DiT_cifar10 
+```
+
+### Sampling
+
+You can have a competition with gobang model by running
+
+```bash
+python main.py --runner DiTRunner --test -o samples --doc DiT_cifar10
+```
+
+**DiT**
+
+We can train an VAE by running
+
+```bash
+python main.py  --config DiT_pixel.yml --runner DiT_pixel_Runner --doc DiT_pixel_cifar10 
+```
+
+if we need to continue training before
+
+```bash
+python main.py  --config DiT_pixel.yml --runner DiT_pixel_Runner --resume_training --doc DiT_pixel_cifar10 
+```
+
+### Sampling
+
+You can have a competition with gobang model by running
+
+```bash
+python main.py --runner DiT_pixel_Runner --test -o DiT_pixel_samples --doc DiT_pixel_cifar10 
+```

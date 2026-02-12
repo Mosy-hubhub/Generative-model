@@ -1,7 +1,7 @@
 training:
   batch_size: 128
   n_epochs: 50000
-  n_iters: 50001
+  n_iters: 500001
   ngpu: 1
   snapshot_freq: 10000
 
@@ -26,13 +26,11 @@ data:
   num_classes: 10
 
 model:
-  patch_size: 2
+  patch_size: 8
   depth: 3
-  hidden_dim: 32
-  num_heads: 4
+  hidden_dim: 64
+  num_heads: 8
   mlp_ratio: 2
-  # choice: "ema" or "mse"
-  vae: "ema"
   learn_sigma: true
 
 optim:
