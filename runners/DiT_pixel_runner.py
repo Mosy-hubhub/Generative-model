@@ -68,6 +68,7 @@ class DiT_pixel_Runner(model_runner):
         latent_size = self.config.data.image_size
         model = DiT(input_size = latent_size,
                     patch_size = self.config.model.patch_size,
+                    in_channels = 3,
                     depth = self.config.model.depth, 
                     hidden_dim = self.config.model.hidden_dim,  
                     num_heads = self.config.model.num_heads,
@@ -151,6 +152,7 @@ class DiT_pixel_Runner(model_runner):
        
         model = DiT(input_size = latent_size,
                     patch_size = self.config.model.patch_size,
+                    in_channels = 3,
                     depth = self.config.model.depth, 
                     hidden_dim = self.config.model.hidden_dim,  
                     num_heads = self.config.model.num_heads,
@@ -180,7 +182,7 @@ class DiT_pixel_Runner(model_runner):
         # Create sampling noise:
         latent_size = self.config.data.image_size
         n = len(class_labels)
-        z = torch.randn(n, 4, latent_size, latent_size, device = self.config.device)
+        z = torch.randn(n, 3, latent_size, latent_size, device = self.config.device)
         y = torch.tensor(class_labels, device = self.config.device)
 
         # Setup classifier-free guidance:
