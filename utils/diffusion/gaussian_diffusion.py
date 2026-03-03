@@ -247,7 +247,7 @@ class GaussianDiffusion:
             Gaussian plus Gaussian is still Gaussian
         """
         assert x_start.shape == x_t.shape
-        mean = (x_t * _extract_into_tensor(self.posterior_mean_coef2, t, x_start.shape) +
+        mean = (x_t * _extract_into_tensor(self.posterior_mean_coef1, t, x_start.shape) +
                 x_start * _extract_into_tensor(self.posterior_mean_coef2, t, x_start.shape))
         
         variance = _extract_into_tensor(self.posterior_variance, t, x_start.shape)
@@ -294,23 +294,26 @@ class GaussianDiffusion:
                 x = denoised_fn(x)
             if clip_denoised is True:
                 x = th.clip(x, -1, 1)
+            return x
         
-        if self.model_mean_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
+        if self.model_var_type in [ModelVarType.LEARNED, ModelVarType.LEARNED_RANGE]:
             assert model_output.shape == (B, C * 2, *x.shape[2:])
-            model_mean, model_log_var = th.split(model_output, C, dim=1)
-            if self.model_mean_type == ModelVarType.LEARNED:
-                log_variance = model_log_var
+            model_output, model_var_values  = th.split(model_output, C, dim=1)
+            if self.model_var_type == ModelVarType.LEARNED:
+                log_variance = model_var_values
             else:
                 max_log = _extract_into_tensor(np.log(self.betas), t, x.shape)
                 min_log = _extract_into_tensor(self.posterior_log_variance_clipped, t, x.shape)
-                frac = (1 + model_log_var) / 2
+                frac = (1 + model_var_values) / 2
                 log_variance = frac * min_log + (1 - frac) * max_log
             variance = th.exp(log_variance)
         else:
-            log_variance, variance = {ModelVarType.FIXED_SMALL:(self.posterior_log_variance_clipped,
-                                                                       np.exp(self.posterior_log_variance_clipped)),
-                                     ModelVarType.FIXED_LARGE:(np.append(self.posterior_log_variance_clipped[:1],
-                                                                         self.betas[1:]), self.betas)}[self.model_mean_type]
+            variance, log_variance = {
+                ModelVarType.FIXED_SMALL:(self.posterior_variance,
+                                          self.posterior_log_variance_clipped,),
+                ModelVarType.FIXED_LARGE:(np.append(self.posterior_variance[1], self.betas[1:]),
+                                          np.log(np.append(self.posterior_variance[1], self.betas[1:])),)
+                }[self.model_var_type]
             variance = _extract_into_tensor(variance, t, x.shape)
             log_variance = _extract_into_tensor(log_variance, t, x.shape)
         
@@ -322,6 +325,8 @@ class GaussianDiffusion:
             pred_xstart = process_xstart(pred_xstart)
         model_mean, _, _ = self.q_posterior_mean_variance(x_start=pred_xstart, x_t=x, t=t)
 
+        print("modulus of model_mean: mean {}, max {}".format(model_mean.abs().mean(), model_mean.abs().max()))
+        print("model_variance: mean {}, max {}".format(variance.abs().mean(), variance.abs().max()))
 
         assert model_mean.shape == log_variance.shape == pred_xstart.shape == x.shape
         return {
@@ -498,7 +503,7 @@ class GaussianDiffusion:
             
         for t in time_list:
             with th.no_grad():
-                time = th.ones((shape[0],), device = device) * t
+                time = th.tensor([t] * shape[0], device=device)
                 out = self.p_sample(model, img, time, 
                                     clip_denoised = clip_denoised,
                                     denoised_fn = denoised_fn,
@@ -506,6 +511,7 @@ class GaussianDiffusion:
                                     model_kwargs = model_kwargs)
                 yield out
                 img = out['sample']
+                print('sample mean:{}, max:{}'.format(img.abs().mean(), img.abs().max()))
 
     def ddim_sample(
         self,
@@ -656,7 +662,7 @@ class GaussianDiffusion:
             
         for t in time_list:
             with th.no_grad():
-                time = th.ones((shape[0],), device = device) * t
+                time = th.tensor([t] * shape[0], device=device)
                 out = self.ddim_sample(model, img, time, 
                                        clip_denoised = clip_denoised,
                                        denoised_fn = denoised_fn,
@@ -731,11 +737,11 @@ class GaussianDiffusion:
             if self.loss_type == LossType.RESCALED_KL:
                 terms["loss"] *= self.num_timesteps
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
+            model_output = model(x_t, t, **model_kwargs)
             if self.model_var_type in [
                 ModelVarType.LEARNED,
                 ModelVarType.LEARNED_RANGE,
             ]:
-                model_output = model(x_t, t, **model_kwargs)
                 B, C = x_t.shape[:2]
                 assert model_output.shape == (B, 2 * C, *x_t.shape[2:])
                 model_output, model_var_values = th.split(model_output, C, dim=1)

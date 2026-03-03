@@ -31,21 +31,25 @@ class DiT_pixel_Runner(model_runner):
         step4: create sigmas as noise scale list
         step5: training loop, write log, get loss function and update parameter
         '''
+        normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         if self.config.data.random_flip is False:
             # transform into [0, 1]
             train_transform = test_transform = transforms.Compose([
                 transforms.Resize(self.config.data.image_size),
-                transforms.ToTensor()
+                transforms.ToTensor(),
+                normalize
             ])
         else:
             train_transform = transforms.Compose([
                 transforms.Resize(self.config.data.image_size),
                 transforms.RandomHorizontalFlip(p=0.5),
-                transforms.ToTensor()
+                transforms.ToTensor(),
+                normalize
             ])
             test_transform = transforms.Compose([
                 transforms.Resize(self.config.data.image_size),
-                transforms.ToTensor()
+                transforms.ToTensor(),
+                normalize
             ])
             
         if self.config.data.dataset == 'CIFAR10':
@@ -78,7 +82,9 @@ class DiT_pixel_Runner(model_runner):
                     ).to(self.config.device)
         model = torch.nn.DataParallel(model) 
 
-        diffusion = create_diffusion(timestep_respacing="")  # default: 1000 steps, linear noise schedule
+        diffusion = create_diffusion(timestep_respacing="",
+                                     learn_sigma = False,
+                                     predict_xstart = True)  # default: 1000 steps, linear noise schedule
         logging.info(f"DiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
         
         optimizer = self.get_optimizer(model.parameters())
@@ -97,8 +103,8 @@ class DiT_pixel_Runner(model_runner):
                 
                 X = X.to(self.config.device)
                 y = y.to(self.config.device)
-                if self.config.data.logit_transform is True:
-                    X = self.logit_transform(X)
+                # if self.config.data.logit_transform is True:
+                #    X = self.logit_transform(X)
                 
                 t = torch.randint(0, diffusion.num_timesteps, (X.shape[0],), device=self.config.device)
                 model_kwargs = dict(y=y)
@@ -134,7 +140,7 @@ class DiT_pixel_Runner(model_runner):
                         model_kwargs = dict(y = y)
                         loss_dict = diffusion.training_losses(model, test_X, t, model_kwargs)
                     
-                    tb_logger.add_scalar('test_loss', loss_dict['loss'], global_step=step)
+                    tb_logger.add_scalar('test_loss', loss_dict["loss"].mean(), global_step=step)
                                
                 if step % self.config.training.snapshot_freq == 0:
                     # save model checkpoint
@@ -149,6 +155,8 @@ class DiT_pixel_Runner(model_runner):
     
     def test(self):
         states = torch.load(os.path.join(self.args.log, 'checkpoint.pth'), map_location=self.config.device)
+        
+        latent_size = self.config.data.image_size
        
         model = DiT(input_size = latent_size,
                     patch_size = self.config.model.patch_size,
@@ -162,7 +170,9 @@ class DiT_pixel_Runner(model_runner):
                     ).to(self.config.device)
         model = torch.nn.DataParallel(model)
         model.load_state_dict(states[0])
-        diffusion = create_diffusion(str(self.config.sampling.num_sampling_steps))
+        diffusion = create_diffusion(str(self.config.sampling.num_sampling_steps),
+                                     learn_sigma = False,
+                                     predict_xstart = True)
 
         if not os.path.exists(self.args.image_folder):
             os.makedirs(self.args.image_folder)
@@ -199,16 +209,19 @@ class DiT_pixel_Runner(model_runner):
                                           model_kwargs = model_kwargs,
                                           progress = True,
                                           device = self.config.device)
-        if self.config.data.logit_transform:
-                samples = torch.sigmoid(samples)
+        # if self.config.data.logit_transform:
+        #         samples = torch.sigmoid(samples)
         samples_cfg, samples_null = samples.chunk(2, dim=0)
 
         image_cfg_grid = make_grid(samples_cfg, nrow = grid_size)
         samples_null_grid = make_grid(samples_null, nrow = grid_size)
+        
+        save_dir = os.path.join(self.args.image_folder, self.args.doc)
+        os.makedirs(save_dir, exist_ok=True)
 
         save_image(image_cfg_grid, os.path.join(self.args.image_folder, self.args.doc, 'image_cfg.png'),
                    normalize = True, value_range = (-1, 1))
-        torch.save(samples_cfg, os.path.join(self.args.image_folder, self.args.doc, 'image_cfg_raw.pth'))
+        # torch.save(samples_cfg, os.path.join(self.args.image_folder, self.args.doc, 'image_cfg_raw.pth'))
         save_image(samples_null_grid, os.path.join(self.args.image_folder, self.args.doc, 'image_null.png'),
                    normalize = True, value_range = (-1, 1))
-        torch.save(samples_null, os.path.join(self.args.image_folder, self.args.doc, 'image_null_raw.pth'))       
+        # torch.save(samples_null, os.path.join(self.args.image_folder, self.args.doc, 'image_null_raw.pth'))       

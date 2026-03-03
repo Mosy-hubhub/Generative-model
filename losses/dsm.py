@@ -16,10 +16,11 @@ def dsm_anneal(scorenet, X, sigmas, labels, anneal_power=2.):
     labels: the order of the noise be used in sigmas
     sigmas: a list of noise level
     '''
-    used_sigmas = sigmas[labels]
+    used_sigmas = sigmas[labels].view(X.shape[0], 1, 1, 1)
     X_perturbed = X + torch.randn_like(X) * used_sigmas
-    score_pred = scorenet(X_perturbed)
+    score_pred = scorenet(X_perturbed, labels)
     score_target = - (X_perturbed - X) / (used_sigmas ** 2)
-    loss =  1/2. * ((score_pred - score_target) ** 2).sum(dim = -1) * (used_sigmas.squeeze() ** anneal_power)
+    loss = ((score_pred - score_target) ** 2).view(X.shape[0], -1).sum(dim=-1)
+    loss =  1/2. * loss * (used_sigmas.squeeze() ** anneal_power)
     return loss.mean(dim=0)
     

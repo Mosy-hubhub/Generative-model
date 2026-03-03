@@ -38,7 +38,7 @@ class TimestepEmbedder(nn.Module):
         :return: an (N, D) Tensor of positional embeddings.
         """
         half = dim // 2
-        frequency_list = torch.exp( - torch.log(max_period) * torch.arange(0, half, dtype=torch.float32) / half).to(t.device)
+        frequency_list = torch.exp( - math.log(max_period) * torch.arange(0, half, dtype=torch.float32) / half).to(t.device)
         
         args = t[:,None].float() * frequency_list[None]
         cossin_wave = torch.cat([torch.sin(args), torch.cos(args)], dim = -1)
@@ -136,6 +136,8 @@ class FinalLayer(nn.Module):
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
         x = modulate(self.norm_final(x), shift, scale)
         x = self.linear(x)
+        # when we don't learn sigma
+        x = torch.tanh(x)
         return x
 
 
@@ -248,7 +250,7 @@ class DiT(nn.Module):
         t = self.t_embedder(t)                   # (N, D)
         y = self.label_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
-        for block in self.blocks:
+        for block in self.DiT_blocks:
             x = block(x, c)                      # (N, T, D)
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
