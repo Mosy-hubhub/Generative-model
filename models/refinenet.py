@@ -311,7 +311,6 @@ class ConditionalResidualBlock(nn.Module):
         self.act = act
         self.dilation = dilation
         self.resample = resample
-        self.norm1 = normalization(input_dim, num_classes)
         self.input_dim = input_dim
         self.output_dim = output_dim
         

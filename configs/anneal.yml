@@ -25,7 +25,7 @@ data:
 model:
   sigma_begin: 1
   sigma_end: 0.01
-  num_classes: 10
+  num_classes: 20
   batch_norm: false
   generater: 'anneal_Langevin_dynamics'
   ## configurations for CelebA, CIFAR10

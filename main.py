@@ -24,7 +24,8 @@ def parse_args_and_config():
     parser.add_argument('--test', action='store_true', help='Whether to test the model')
     parser.add_argument('--resume_training', action='store_true', help='Whether to resume training')
     parser.add_argument('-o', '--image_folder', type=str, default='images', help="The directory of image outputs")
-
+    parser.add_argument('--fid_mode', action='store_true', help='Generate 50k samples for FID evaluation')
+    
     args = parser.parse_args()
 
     # parse config file

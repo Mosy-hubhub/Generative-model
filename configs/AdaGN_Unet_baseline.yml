@@ -8,7 +8,7 @@ training:
 sampling:
   sample_way: 'SMLD'
   cfg_scale: 4.0
-  num_sampling_steps: 150
+  # num_sampling_steps: 150
 
 data:
   ## mnist
@@ -27,15 +27,17 @@ data:
   num_classes: 10
 
 model:
-  patch_size: 8
-  depth: 3
+  sigma_begin: 50
+  sigma_end: 0.01
   hidden_dim: 64
-  num_heads: 8
-  mlp_ratio: 2
   # 1000 for DDPM, 10 for SMLD is suggested.
-  num_timesteps: 10
+  num_timesteps: 20
   learn_sigma: false
   predict_xstart: true
+  ngf: 64
+  embeding_size: 512
+  num_groups: 32
+  class_dropout_prob: 0.1
 
 optim:
   weight_decay: 0.000

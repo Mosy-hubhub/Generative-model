@@ -136,8 +136,6 @@ class FinalLayer(nn.Module):
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
         x = modulate(self.norm_final(x), shift, scale)
         x = self.linear(x)
-        # when we don't learn sigma
-        x = torch.tanh(x)
         return x
 
 
@@ -169,6 +167,7 @@ class DiT(nn.Module):
         # ouput.shape = (batch_size, num_patch, hidden_dim)
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_dim, bias=True)
         # output.shape = (batch_size, hidden_dim)
+        # when we choose DDPM:
         self.t_embedder = TimestepEmbedder(hidden_dim)
         # output.shape = (batch_size, hidden_dim)
         self.label_embedder = LabelEmbedder(num_classes, hidden_dim, class_dropout_prob)

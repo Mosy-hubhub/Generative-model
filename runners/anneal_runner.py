@@ -126,11 +126,13 @@ class AnnealRunner(model_runner):
                     test_X = test_X.to(self.config.device)
                     test_y = test_y.to(self.config.device)
                         
+                    test_labels = torch.randint(0, self.config.model.num_classes - 1, (test_X.shape[0],), device=test_X.device)
+                    
                     with torch.no_grad():
                         if self.config.training.algo == 'ssm_annel':
                             loss = ssm_anneal_vr(scorenet, test_X)
                         elif self.config.training.algo == 'dsm_anneal':
-                            loss = dsm_anneal(scorenet, test_X, self.sigmas, labels, self.config.training.anneal_power)
+                            loss = dsm_anneal(scorenet, test_X, self.sigmas, test_labels, self.config.training.anneal_power)
                         else:
                             raise NotImplementedError('loss_function {} not understood.'.format(self.config.training.algo))
         

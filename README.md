@@ -36,7 +36,7 @@ python main.py --runner AnnealRunner --config anneal.yml --doc NCSN_cifar10
 if we need to continue training before
 
 ```bash
-python main.py  --config DiT.yml --runner DiTRunner --resume_training --doc NCSN_cifar10 
+python main.py  --config anneal.yml --runner AnnealRunner --resume_training --doc NCSN_cifar10 
 ```
 
 Then the model will be trained according to the configuration files in `configs/anneal.yml`. The log files will be stored in `run/logs/cifar10`, and the tensorboard logs are in `run/tensorboard/cifar10`.
@@ -91,4 +91,29 @@ You can have a competition with gobang model by running
 
 ```bash
 python main.py --runner DiT_pixel_Runner --test -o DiT_pixel_samples --doc DiT_pixel_cifar10 
+```
+
+**AdaGN_Unet**
+We can train an VAE by running
+
+```bash
+python main.py  --config AdaGN_Unet_baseline.yml --runner AdaGN_Unet_Runner --doc AdaGN_Unet_baseline_cifar10 
+```
+
+if we need to continue training before
+
+```bash
+python main.py  --config AdaGN_Unet_baseline.yml --runner AdaGN_Unet_Runner --resume_training --doc AdaGN_Unet_baseline_cifar10
+```
+
+### Sampling
+
+You can have a competition with gobang model by running
+
+```bash
+python main.py --runner AdaGN_Unet_Runner --test -o AdaGN_Unet_baseline_samples --doc AdaGN_Unet_baseline_cifar10
+```
+### fid
+```bash
+python main.py --runner AdaGN_Unet_Runner --test --fid_mode -o AdaGN_Unet_baseline_samples --doc AdaGN_Unet_baseline_cifar10
 ```
