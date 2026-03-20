@@ -27,7 +27,7 @@ data:
   num_classes: 10
 
 model:
-  model_name: 'AdaGN_Unet_baseline'
+  model_name: 'AdaGN_Unet_attention'
   sigma_begin: 50
   sigma_end: 0.01
   hidden_dim: 64
@@ -38,7 +38,9 @@ model:
   ngf: 64
   embeding_size: 512
   num_groups: 32
+  num_res_blocks: 2
   class_dropout_prob: 0.1
+  attention_resolutions: (16, 8)
 
 optim:
   weight_decay: 0.000

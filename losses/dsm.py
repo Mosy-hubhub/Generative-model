@@ -33,8 +33,7 @@ def cond_score_anneal(scorenet, X, y, t, sigmas, anneal_power=2.):
     used_sigmas = sigmas[t].view(X.shape[0], 1, 1, 1)
     z = torch.randn_like(X)
     X_perturbed = X + z * used_sigmas
-    X_in = X_perturbed / torch.sqrt(used_sigmas ** 2 + 0.33) 
-    score_pred = scorenet(X_in, t, y)
+    score_pred = scorenet(X_perturbed, t, y)
     score_target = - z / used_sigmas 
     loss = ((score_pred - score_target) ** 2).view(X.shape[0], -1).mean(dim=-1)
     loss =  1/2. * loss * (used_sigmas.squeeze() ** anneal_power)
@@ -75,3 +74,19 @@ def cond_vpred_anneal(v_net, X, y, t, sigmas):
     # 4. 算 Loss (目标依然是 z)
     loss = ((v_pred - target_v) ** 2).view(X.shape[0], -1).mean(dim=-1)
     return loss.mean(dim=0)
+
+
+class EDMLoss:
+    def __init__(self, P_mean=-1.2, P_std=1.2, sigma_data=0.5):
+        self.P_mean = P_mean
+        self.P_std = P_std
+        self.sigma_data = sigma_data
+
+    def __call__(self, xstart_net, X, y):
+        rnd_normal = torch.randn([X.shape[0], 1, 1, 1], device=X.device)
+        sigma = (rnd_normal * self.P_std + self.P_mean).exp()
+        weight = (sigma ** 2 + self.sigma_data ** 2) / (sigma * self.sigma_data) ** 2
+        noise = torch.randn_like(X) * sigma
+        D_yn = xstart_net(X + noise, sigma, y)
+        loss = weight * ((D_yn - X) ** 2)
+        return loss

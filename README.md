@@ -117,3 +117,35 @@ python main.py --runner AdaGN_Unet_Runner --test -o AdaGN_Unet_baseline_samples 
 ```bash
 python main.py --runner AdaGN_Unet_Runner --test --fid_mode -o AdaGN_Unet_baseline_samples --doc AdaGN_Unet_baseline_cifar10
 ```
+```bash
+python -m pytorch_fid cifar10_real_images_5000 AdaGN_Unet_baseline_samples/AdaGN_Unet_baseline_cifar10_2058_2026-Mar-11-13-28-20/fid_samples --device cuda:0
+```
+
+**EDM_UNet_DDPM**
+We can train an VAE by running
+
+```bash
+python main.py  --config AdaGN_Unet_atte_ddpm.yml --runner Cond_DDPM_Runner --doc AdaGN_Unet_atte_EDM_cifar10 
+```
+
+if we need to continue training before
+
+```bash
+python main.py  --config AdaGN_Unet_atte_ddpm.yml --runner Cond_DDPM_Runner --resume_training --doc AdaGN_Unet_atte_EDM_cifar10
+```
+
+### Sampling
+
+You can have a competition with gobang model by running
+
+```bash
+python main.py --runner Cond_DDPM_Runner --test -o AdaGN_Unet_atte_ddpm_samples --doc AdaGN_Unet_atte_EDM_cifar10
+```
+### fid
+```bash
+python main.py --runner AdaGN_Unet_Runner --test --fid_mode -o AdaGN_Unet_atte_ddpm_samples --doc AdaGN_Unet_atte_EDM_cifar10
+```
+```bash
+python -m pytorch_fid cifar10_real_images_5000 AdaGN_Unet_atte_ddpm_samples/AdaGN_Unet_atte_EDM_cifar10_2058_2026-Mar-11-13-28-20/fid_samples --device cuda:0
+```
+

@@ -4,20 +4,13 @@ training:
   n_iters: 500001
   ngpu: 1
   snapshot_freq: 10000
+  num_workers: 8
 
 sampling:
-  sample_way: 'SMLD'
+#  sample_way: 'DDPM'
   cfg_scale: 4.0
-  # num_sampling_steps: 150
 
 data:
-  ## mnist
-  # dataset: "MNIST"
-  # image_size: 28
-  # channels: 1
-  # logit_transform: false
-  # random_flip: false
-
  ## cifar10
   dataset: "CIFAR10"
   image_size: 32
@@ -25,20 +18,17 @@ data:
   logit_transform: false
   random_flip: true
   num_classes: 10
+  sigma_data: 0.5
 
 model:
-  model_name: 'AdaGN_Unet_baseline'
-  sigma_begin: 50
-  sigma_end: 0.01
+  model_name: 'EDM_AdaGN_Unet_attention'
   hidden_dim: 64
-  # 1000 for DDPM, 10 for SMLD is suggested.
-  num_timesteps: 20
-  learn_sigma: false
-  predict_xstart: true
-  ngf: 64
+  ngf: 128
   embeding_size: 512
-  num_groups: 32
+#  num_groups: 32
+  num_res_blocks: 2
   class_dropout_prob: 0.1
+  attention_resolutions: [16, 8]
 
 optim:
   weight_decay: 0.000

@@ -9,11 +9,13 @@ from torch.utils.data import DataLoader
 import tensorboardX
 import shutil
 from models.Cond_Unet_baseline import AdaGN_UNet_baseline 
+from models.Cond_unet_attention import Baseline_UNet_attention_wrapped
 from losses.dsm import cond_score_anneal, cond_dsm_anneal
 import tqdm
 from torchvision.utils import save_image, make_grid
 from PIL import Image
 from .abstruct_runner import model_runner
+from utils.EMA import EMA
 
 class AdaGN_Unet_Runner(model_runner):
     def __init__(self, args, config):
@@ -74,17 +76,23 @@ class AdaGN_Unet_Runner(model_runner):
             shutil.rmtree(tb_path)
         tb_logger = tensorboardX.SummaryWriter(log_dir = tb_path)
         
-        scorenet = AdaGN_UNet_baseline(self.config).to(self.config.device)
+        if self.config.model.model_name == 'AdaGN_Unet_baseline':
+            scorenet = AdaGN_UNet_baseline(self.config).to(self.config.device)
+        elif self.config.model.model_name == 'AdaGN_Unet_attention':
+            scorenet = Baseline_UNet_attention_wrapped(self.config).to(self.config.device)
+        else:
+            raise NotImplementedError('model {} not understood.'.format(self.config.model.model_name))
+
         optimizer = self.get_optimizer(scorenet.parameters())
 
         if self.args.resume_training:
             states = torch.load(os.path.join(self.args.log, 'checkpoint.pth'))
             scorenet.load_state_dict(states[0])
             optimizer.load_state_dict(states[1])
-        
+            
+        ema = EMA(scorenet, decay = 0.9999)
         step = 0
-        
-       
+               
         for epoch in range(self.config.training.n_epochs):
             for i, (X,y) in enumerate(train_loader):
                 step += 1
@@ -101,6 +109,8 @@ class AdaGN_Unet_Runner(model_runner):
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+                
+                ema.update()
                 
                 tb_logger.add_scalar('loss', loss, global_step=step)
                 logging.info("step: {}, loss: {}".format(step, loss.item()))
@@ -128,17 +138,23 @@ class AdaGN_Unet_Runner(model_runner):
                     
                 if step % self.config.training.snapshot_freq == 0:
                     # save model checkpoint
+                    ema.apply_shadow()
                     states = [
                         scorenet.state_dict(),
                         optimizer.state_dict(),
                     ]
                     torch.save(states, os.path.join(self.args.log, 'checkpoint_{}.pth'.format(step)))
                     torch.save(states, os.path.join(self.args.log, 'checkpoint.pth'))
-    
+                    ema.restore()
     
     def test(self):
         states = torch.load(os.path.join(self.args.log, 'checkpoint.pth'), map_location=self.config.device)
-        scorenet = AdaGN_UNet_baseline(self.config).to(device = self.config.device)
+        if self.config.model.model_name == 'AdaGN_Unet_baseline':
+            scorenet = AdaGN_UNet_baseline(self.config).to(self.config.device)
+        elif self.config.model.model_name == 'AdaGN_Unet_attention':
+            scorenet = Baseline_UNet_attention_wrapped(self.config).to(self.config.device)
+        else:
+            raise NotImplementedError('model {} not understood.'.format(self.config.model.model_name))
         scorenet.load_state_dict(states[0])
 
         if not os.path.exists(self.args.image_folder):
@@ -198,9 +214,7 @@ class AdaGN_Unet_Runner(model_runner):
                         gif_frames.append(Image.fromarray(im_data_cfg))
                 
                     noise = torch.randn_like(X_mod)
-                    X_in = X_mod / torch.sqrt(sigma ** 2 + 0.33) 
-                    grad =  score_net.forward_with_cfg(X_in, t, y, self.config.sampling.cfg_scale)
-
+                    grad =  score_net.forward_with_cfg(X_mod, t, y, self.config.sampling.cfg_scale)
                     X_mod = X_mod + 1/2. * step_length * grad + torch.sqrt(step_length) * noise
                 
                     curr_step += 1
@@ -236,8 +250,7 @@ class AdaGN_Unet_Runner(model_runner):
             
             for _ in range(num_steps_each_scale):
                 noise = torch.randn_like(X_mod)
-                X_in = X_mod / torch.sqrt(sigma ** 2 + 0.33) 
-                grad = score_net.forward_with_cfg(X_in, t, y, self.config.sampling.cfg_scale)
+                grad = score_net.forward_with_cfg(X_mod, t, y, self.config.sampling.cfg_scale)
                 X_mod = X_mod + 1/2. * step_length * grad + torch.sqrt(step_length) * noise
 
         final_sample = X_mod

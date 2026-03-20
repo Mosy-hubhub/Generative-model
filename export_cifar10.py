@@ -3,7 +3,7 @@ import random
 from torchvision.datasets import CIFAR10
 from tqdm import tqdm
 
-def export_cifar10_images(base_dir='cifar10_real_images', num_images=10000):
+def export_cifar10_images(base_dir='5cifar10_real_images', num_images=10000):
     # 1. 动态拼接带有数量后缀的文件夹名 (例如: cifar10_real_images_10000)
     output_dir = f"{base_dir}_{num_images}"
     os.makedirs(output_dir, exist_ok=True)
@@ -40,7 +40,7 @@ def export_cifar10_images(base_dir='cifar10_real_images', num_images=10000):
 if __name__ == "__main__":
     # 你可以在这里随便改数量！
     # 比如先搞个 10000 张用来做日常开发期的快速 FID 评测
-    export_cifar10_images(num_images=5000)
+    export_cifar10_images(num_images=1000)
     
     # 等你要终极打榜的时候，再跑一次：
     # export_cifar10_images(num_images=50000)

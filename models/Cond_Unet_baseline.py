@@ -1,4 +1,5 @@
 import torch.nn as nn
+import numpy as np
 import torch.nn.functional as F
 import torch
 from functools import partial
@@ -410,6 +411,14 @@ class AdaGN_UNet_baseline(nn.Module):
         self.label_embedder = LabelEmbedder(self.num_classes, self.embeding_size, self.class_dropout_prob)
         self.t_embedder = TimestepEmbedder(self.embeding_size)
         
+        sigmas = torch.tensor(
+            np.exp(np.linspace(np.log(config.model.sigma_begin), np.log(config.model.sigma_end),
+                               config.model.num_timesteps))).float().to(config.device)
+        self.sigmas = sigmas
+        self.var_data =  config.data.var_data
+        self.sigma_data = self.var_data ** 0.5
+        
+        
         self.begin_conv = nn.Conv2d(config.data.channels, ngf, 3, stride=1, padding=1)
         
         self.normalizer = nn.GroupNorm(self.num_groups, ngf, affine=False)
@@ -461,13 +470,13 @@ class AdaGN_UNet_baseline(nn.Module):
         return x
 
     def forward(self, x, t, y):
-        #if not self.logit_transform:
-        #    x = 2 * x - 1.
+        used_sigmas = self.sigmas[t].view(x.shape[0], 1, 1, 1)
+        c_in = 1 / (self.var_data + used_sigmas ** 2).sqrt()
             
         # 计算全局融合指令 c
         c = self.t_embedder(t) + self.label_embedder(y, self.training)
 
-        output = self.begin_conv(x)
+        output = self.begin_conv(x * c_in)
 
         # Encoder
         layer1 = self._compute_cond_module(self.res1, output, c)
