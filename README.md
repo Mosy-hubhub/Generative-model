@@ -143,7 +143,7 @@ python main.py --runner Cond_DDPM_Runner --test -o AdaGN_Unet_atte_ddpm_samples 
 ```
 ### fid
 ```bash
-python main.py --runner AdaGN_Unet_Runner --test --fid_mode -o AdaGN_Unet_atte_ddpm_samples --doc AdaGN_Unet_atte_EDM_cifar10
+python main.py --runner Cond_DDPM_Runner --test --fid_mode -o AdaGN_Unet_atte_ddpm_samples --doc AdaGN_Unet_atte_EDM_cifar10
 ```
 ```bash
 python -m pytorch_fid cifar10_real_images_5000 AdaGN_Unet_atte_ddpm_samples/AdaGN_Unet_atte_EDM_cifar10_2058_2026-Mar-11-13-28-20/fid_samples --device cuda:0

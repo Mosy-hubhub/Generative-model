@@ -33,3 +33,21 @@ class EMA:
                 assert name in self.backup
                 param.data = self.backup[name]
         self.backup = {}
+
+
+class EMA_warmup(EMA):
+    def __init__(self, model, step = 0, beta_target = 0.9999):
+        super().__init__(model)
+        self.beta_target = beta_target
+        self.step = step
+        
+    def update(self):
+        """在每次 optimizer.step() 之后调用此函数，更新 EMA 权重"""
+        beta_cur = min(self.beta_target, (1 + self.step)/(10 + self.step))
+        self.step += 1
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                assert name in self.shadow
+                self.shadow[name].mul_(beta_cur).add_(param.data, alpha=1.0 - beta_cur)
+        
+     

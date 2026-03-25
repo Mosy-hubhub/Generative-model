@@ -1,9 +1,9 @@
 training:
   batch_size: 128
-  n_epochs: 50000
-  n_iters: 500001
-  ngpu: 1
-  snapshot_freq: 10000
+  n_epochs: 500000
+  n_iters: 1000001
+  snapshot_freq: 100000
+  save_freq: 10000
   num_workers: 8
 
 sampling:
@@ -33,6 +33,7 @@ model:
 optim:
   weight_decay: 0.000
   optimizer: "Adam"
-  lr: 0.001
+  warmup_steps: 5000
+  lr: 0.0001
   beta1: 0.9
   amsgrad: false

@@ -15,7 +15,8 @@ import tqdm
 from torchvision.utils import save_image, make_grid
 from PIL import Image
 from .abstruct_runner import model_runner
-from utils.EMA import EMA
+from utils.EMA import EMA, EMA_warmup
+from utils.lr_warmup import get_current_lr_linear
 
 class Cond_DDPM_Runner(model_runner):
     def __init__(self, args, config):
@@ -78,19 +79,22 @@ class Cond_DDPM_Runner(model_runner):
         optimizer = self.get_optimizer(xstart_net.parameters())
         loss_caculator = EDMLoss(sigma_data = self.config.data.sigma_data)
 
+        step = 0
         if self.args.resume_training:
             states = torch.load(os.path.join(self.args.log, 'checkpoint.pth'))
             xstart_net.load_state_dict(states[0])
             optimizer.load_state_dict(states[1])
+            step = states[2]
             
-        if torch.cuda.device_count() > 1:
-            logging.info(f"Training on {torch.cuda.device_count()} GPUs!")
-            xstart_net = torch.nn.DataParallel(xstart_net)
+        # if torch.cuda.device_count() > 1:
+        #    logging.info(f"Training on {torch.cuda.device_count()} GPUs!")
+        #    xstart_net = torch.nn.DataParallel(xstart_net)
             
         base_model = xstart_net.module if hasattr(xstart_net, 'module') else xstart_net
-        ema = EMA(base_model, decay = 0.9999)
-        # ema = EMA(xstart_net, decay = 0.9999)
-        step = 0
+        # ema = EMA(base_model, decay = 0.9999)
+        ema = EMA_warmup(base_model, step)
+        max_lr = self.config.optim.lr
+        warmup_steps = self.config.optim.warmup_steps
                
         for epoch in range(self.config.training.n_epochs):
             for i, (X,y) in enumerate(train_loader):
@@ -105,14 +109,19 @@ class Cond_DDPM_Runner(model_runner):
                 loss = loss_caculator(xstart_net, X, y)
                 loss = loss.mean()
                 
+                current_lr = get_current_lr_linear(step, warmup_steps, max_lr)
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = current_lr
+                
                 optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(xstart_net.parameters(), max_norm=1.0)
                 optimizer.step()
                 
                 ema.update()
                 
                 tb_logger.add_scalar('loss', loss.item(), global_step=step)
-                if i % 10 == 0:
+                if step % 10 == 0:
                     logging.info("step: {}, loss: {}".format(step, loss.item()))
                 
                 if step >= self.config.training.n_iters:
@@ -128,22 +137,30 @@ class Cond_DDPM_Runner(model_runner):
                         
                     test_X = test_X.to(self.config.device)
                     test_y = test_y.to(self.config.device)
+                    
+                    test_X = test_X * (255. / 256.) + (torch.rand_like(test_X) * 2) / 256.
+                    if self.config.data.logit_transform is True:
+                        test_X = self.logit_transform(test_X)
                          
                     with torch.no_grad():
                         test_loss = loss_caculator(xstart_net, test_X, test_y)                        
                         test_loss = test_loss.mean()                        
                     tb_logger.add_scalar('test_loss', test_loss, global_step=step)
+                    xstart_net.train()
                     
-                if step % self.config.training.snapshot_freq == 0:
+                if step % self.config.training.save_freq == 0:
                     # save model checkpoint
                     ema.apply_shadow()
                     model_to_save = xstart_net.module if hasattr(xstart_net, 'module') else xstart_net
                     states = [
                         model_to_save.state_dict(),
                         optimizer.state_dict(),
+                        step,
                     ]
-                    torch.save(states, os.path.join(self.args.log, 'checkpoint_{}.pth'.format(step)))
                     torch.save(states, os.path.join(self.args.log, 'checkpoint.pth'))
+                    if step % self.config.training.snapshot_freq == 0:
+                        snapshot_path = os.path.join(self.args.log, f'checkpoint_{step}.pth')
+                        shutil.copyfile(os.path.join(self.args.log, 'checkpoint.pth'), snapshot_path)
                     ema.restore()
     
     def test(self):
@@ -163,20 +180,18 @@ class Cond_DDPM_Runner(model_runner):
             if getattr(self.args, 'fid_mode', False):
                 self.generate_fid_samples(xstart_net, total_samples=50000, batch_size=128)
             else:
-                class_labels = [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4]
+                #class_labels = [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4]
+                class_labels = [2] * 25
                 n = len(class_labels)
                 z = torch.randn(n, 3, 32, 32, device = self.config.device)
                 y = torch.tensor(class_labels, device = self.config.device)
-            
-                z = torch.cat([z, z], 0)
-                y_null = torch.tensor([self.config.data.num_classes] * n, device = self.config.device)
-                y = torch.cat([y, y_null], 0)
-            
                 edm_sampler_GIF(xstart_net, z, y, self.args, self.config,
+                                cfg_scale = self.config.sampling.cfg_scale,
                                 S_churn = 40,
                                 S_min = 0.05,
                                 S_max = 50,
-                                S_noise = 1.003
+                                S_noise = 1.003,
+                                num_steps = 35
                                 )    
             
 
@@ -202,14 +217,11 @@ class Cond_DDPM_Runner(model_runner):
                 current_batch_size = min(batch_size, total_samples - samples_generated)
                 
                 y = torch.randint(0, self.config.data.num_classes, (current_batch_size,), device=self.config.device)
-                z = torch.randn(current_batch_size, 3, 32, 32, device=self.config.device) * self.sigmas[0]
-                z_2b = torch.cat([z, z], 0)
-                y_null = torch.tensor([self.config.data.num_classes] * current_batch_size, device=self.config.device)
-                y_2b = torch.cat([y, y_null], 0)
+                z = torch.randn(current_batch_size, 3, 32, 32, device=self.config.device)
                 
                 if sampler == 'EDM_sampler':
                     with torch.no_grad():
-                        samples_tensor = edm_sampler(xstart_net, z_2b, y_2b,
+                        samples_tensor = edm_sampler(xstart_net, z, y,
                                                      cfg_scale = self.config.sampling.cfg_scale,
                                                      S_churn = 40,
                                                      S_min = 0.05,
@@ -224,8 +236,7 @@ class Cond_DDPM_Runner(model_runner):
                     samples_tensor = (samples_tensor + 1) / 2.0
             
                 samples_tensor = torch.clamp(samples_tensor, 0, 1)
-                final_sample_cfg, _ = samples_tensor.chunk(2, dim=0)
-                im_data = final_sample_cfg.mul(255).add_(0.5).clamp(0, 255).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
+                im_data = samples_tensor.mul(255).add_(0.5).clamp(0, 255).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
                 
                 for j in range(current_batch_size):
                     global_idx = samples_generated + j

@@ -513,8 +513,10 @@ class UNetModel(nn.Module):
         for module in self.output_blocks:
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb)
-        h = h.type(x.dtype)
-        return self.out(h)
+        # h = h.type(x.dtype)
+        out = self.out(h)
+        # return self.out(h)
+        return out.type(x.dtype)
     
     
 #=========================================================================================
@@ -586,22 +588,14 @@ class EDM_UNet_attention(nn.Module):
         self.var_data =  self.sigma_data ** 2
 
     def forward(self, x, sigma, y):
-        # 确保 sigma 形状可以和图像广播 [Batch, 1, 1, 1]
         sigma_view = sigma.view(-1, 1, 1, 1)
-        
-        # 计算输出缩放系数 c_skip 和 c_out (EDM的动态离合器)
         c_skip = self.var_data / (sigma_view ** 2 + self.var_data)
         c_out = sigma_view * self.sigma_data / (sigma_view ** 2 + self.var_data).sqrt()
-        
-        # 计算伪装的 t (c_noise)，并放大 1000 倍适配你的 TimestepEmbedder
+        c_in = 1 / (self.var_data + sigma_view ** 2).sqrt()
+        # 扮演t的角色
         c_noise = (sigma.log() / 4.0) * 1000.0
-        
-        # 呼叫底层 U-Net！注意：c_noise 需要被展平为 1D 传给嵌入层
-        F_x = self.model(x, c_noise.flatten(), y)
-        
-        # 完美组合！强迫模型输出去噪后的干净图像 D(x)
+        F_x = self.model(x * c_in, c_noise.flatten(), y)
         D_x = c_skip * x + c_out * F_x
-        
         return D_x
 
 
@@ -614,6 +608,7 @@ class EDM_UNet_attention_wrapped(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.model = EDM_UNet_attention(config)
+        self.num_classes = config.data.num_classes
         
     def forward(self, x, sigma, y):
         D_x = self.model(x, sigma, y)
@@ -621,13 +616,17 @@ class EDM_UNet_attention_wrapped(nn.Module):
     
     def forward_with_cfg(self, x, sigma, y, cfg_scale):
         """
-        传入的 x, sigma, y 都是 Batch Size 为 B 的真实张量。
-        内层极其干净地完成 2B 翻倍，算出带 CFG 的 Score 后还给你 B 尺寸的结果。
+        x.shape[0] = batch_size
+        y.shape[0] = batch_size
+        xstart_cfg.shape[0] = batch_size 
         """
-        half = x[: len(x) // 2]
-        combined = th.cat([half, half], dim=0)
-        xstart = self.forward(combined, sigma, y)
+        n = x.shape[0]
+        combined_x = th.cat([x, x], dim=0)
+        y_null = th.tensor([self.num_classes] * n, device = y.device)
+        combined_y = th.cat([y, y_null], dim=0)
+        sigma = sigma.view(-1).expand(n)
+        combined_sigma = th.cat([sigma, sigma], dim=0)
+        xstart = self.forward(combined_x, combined_sigma, combined_y)
         cond_xstart, uncond_xstart = th.split(xstart, len(xstart) // 2, dim=0)
-        half_xstart = uncond_xstart + cfg_scale * (cond_xstart - uncond_xstart)
-        xstart_cfg = th.cat([half_xstart, half_xstart], dim=0)
+        xstart_cfg = uncond_xstart + cfg_scale * (cond_xstart - uncond_xstart)
         return xstart_cfg

@@ -5,6 +5,7 @@ import tqdm
 from torchvision.utils import make_grid
 from PIL import Image
 
+@torch.no_grad()
 def edm_sampler(
     xstart_net, latents, y, 
     cfg_scale = 0.3, num_steps=18, sigma_min=0.002, sigma_max=80,
@@ -40,6 +41,7 @@ def edm_sampler(
     return x_next
 
 
+@torch.no_grad()
 def edm_sampler_GIF(
     xstart_net, latents, y, args, config, 
     cfg_scale=0.3, num_steps=18, sigma_min=0.002, sigma_max=80,
@@ -47,7 +49,7 @@ def edm_sampler_GIF(
 ):
 
     gif_frames = []
-    grid_size = int((latents.shape[0] / 2) ** 0.5) 
+    grid_size = int(latents.shape[0] ** 0.5) 
     save_dir = os.path.join(args.image_folder, args.doc)
     os.makedirs(save_dir, exist_ok=True)
 
@@ -72,11 +74,9 @@ def edm_sampler_GIF(
         sample_to_show = denoised.clone().float() 
         if config.data.logit_transform:
             sample_to_show = torch.sigmoid(sample_to_show)
-        sample_to_show = torch.clamp((sample_to_show + 1)/2, 0, 1)
-        
-        # 切片，只保留带有条件引导 (CFG) 的前半部分图像来画网格
-        sample_to_show_cfg, _ = sample_to_show.chunk(2, dim=0)
-        grid_cfg = make_grid(sample_to_show_cfg, nrow=grid_size)
+        else:
+            sample_to_show = torch.clamp((sample_to_show + 1)/2, 0, 1)
+        grid_cfg = make_grid(sample_to_show, nrow=grid_size)
         im_data_cfg = grid_cfg.mul(255).add_(0.5).clamp(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
         gif_frames.append(Image.fromarray(im_data_cfg))
         # --------------------------------------
@@ -87,7 +87,8 @@ def edm_sampler_GIF(
 
         # Apply 2nd order correction.
         if i < num_steps - 1:
-            denoised = xstart_net.forward_with_cfg(x_next, t_next, y, cfg_scale).to(torch.float64)
+            #denoised = xstart_net.forward_with_cfg(x_next, t_next, y, cfg_scale).to(torch.float64)
+            denoised = xstart_net.forward_with_cfg(x_next, t_next, y, cfg_scale)
             d_prime = (x_next - denoised) / t_next
             x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
 

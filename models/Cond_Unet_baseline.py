@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch
 from functools import partial
 from models.DiT import TimestepEmbedder, LabelEmbedder
-from refinenet import ConvMeanPool, dilated_conv3x3, conv3x3
+from models.refinenet import ConvMeanPool, dilated_conv3x3, conv3x3
 
 
 class ConditionalResidualBlock_AdaGN(nn.Module):
